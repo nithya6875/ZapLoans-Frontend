@@ -1,7 +1,4 @@
-"use client"
-
-export default function Dashboard(){
-    return <div>
-        this is dashboard. Need to implement auth
-    </div>
+// Dashboard page 
+export default function DashboardPage() {
+    return <div>this is dashboard. Need to implement auth</div>;
 }

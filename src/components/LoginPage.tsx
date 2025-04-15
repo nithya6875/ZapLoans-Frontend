@@ -1,48 +1,57 @@
-"use client"
+"use client";
 import { authService } from "@/services/api";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import bs58 from "bs58";
 
-export default function LoginPage(){
-    const { publicKey, connected } = useWallet();
+// Login page component
+export default function LoginPage() {
+    // Get the wallet connection, public key, and signMessage function
+    const { publicKey, connected, signMessage } = useWallet();
+
+    // State variables
     const [username, setUsername] = useState("");
     const [email, setEmail] = useState("");
     const [isRegistering, setIsRegistering] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
 
+    // Router for navigation
     const router = useRouter();
 
-    useEffect(()=>{
-        async function checkExistingUser(){
-            if(connected && publicKey){
+    // Effect to check if the user is already registered
+    useEffect(() => {
+        async function checkExistingUser() {
+            if (connected && publicKey) {
                 setIsLoading(true);
-                try{
-                    const response = await authService.getUserByWallet(publicKey.toString());
-                    if(response.user){
+                try {
+                    const response = await authService.getUserByWallet(
+                        publicKey.toString()
+                    );
+                    if (response.user) {
                         router.push("/dashboard");
-                    }else{
+                    } else {
                         setIsRegistering(true);
                     }
-                }catch(error:any){
-                    if(error.response && error.response.status === 404){
+                } catch (error: any) {
+                    if (error.response && error.response.status === 404) {
                         setIsRegistering(true);
-                    }else{
+                    } else {
                         setError("Failed to check user status");
-                        console.error("error checking user",error);
+                        console.error("error checking user", error);
                     }
-                }finally{
+                } finally {
                     setIsLoading(false);
                 }
             }
         }
 
-        checkExistingUser()
+        checkExistingUser();
+    }, [connected, publicKey, router]);
 
-    },[connected,publicKey, router]);
-
+    // Handle login button click
     async function handleLoginClick() {
         if (!connected || !publicKey) {
             setError("Please connect your wallet first");
@@ -52,32 +61,59 @@ export default function LoginPage(){
             setError("Username is required");
             return;
         }
+        if (!signMessage) {
+            setError("Wallet does not support message signing");
+            return;
+        }
 
         setIsLoading(true);
         setError("");
 
-        try{
-            const response:any = authService.loginWithWallet( //need to change the type of response based on backend
+        try {
+            // Get nonce from server
+            const nonceResponse = await authService.getNonce(
+                publicKey.toString()
+            );
+            const nonceMessage = nonceResponse.nonce;
+            
+            // Create the message to sign (wallet address + nonce)
+            const messageToSign = `Verify wallet ownership: ${publicKey.toString()}\nNonce: ${nonceMessage}`;
+            
+            // Convert message to Uint8Array for signing
+            const messageBytes = new TextEncoder().encode(messageToSign);
+            
+            // Request user to sign the message with their wallet
+            const signedMessage = await signMessage(messageBytes);
+            
+            // Convert signature to base58 string to send to server
+            const signature = bs58.encode(signedMessage);
+            
+            // Send the signature along with login info
+            const response = await authService.loginWithWallet(
                 username,
                 publicKey.toString(),
-                email
-            )
-            if(response.user){    //depends on the backend as well
+                email,
+                signature
+            );
+            
+            if (response.user) {
                 router.push("/dashboard");
             }
-
-        }catch(error){
-            console.error("Login error:",error);
-            setError("Failed to register. Please try again")
-        }finally{
+        } catch (error) {
+            console.error("Login error:", error);
+            setError("Failed to register. Please try again");
+        } finally {
             setIsLoading(false);
         }
     }
 
+    // Render the login page
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100">
             <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
-                <h1 className="mb-6 text-2xl font-bold text-center">ZapLoans</h1>
+                <h1 className="mb-6 text-2xl font-bold text-center">
+                    ZapLoans
+                </h1>
 
                 {/* Wallet Connect Button */}
                 <div className="flex justify-center mb-6">
@@ -95,7 +131,9 @@ export default function LoginPage(){
                 {connected && isRegistering && (
                     <div className="space-y-4">
                         <div>
-                            <label className="block mb-1 text-sm font-medium">Username</label>
+                            <label className="block mb-1 text-sm font-medium">
+                                Username
+                            </label>
                             <input
                                 type="text"
                                 value={username}
@@ -104,9 +142,11 @@ export default function LoginPage(){
                                 placeholder="Enter username"
                             />
                         </div>
-                        
+
                         <div>
-                            <label className="block mb-1 text-sm font-medium">Email</label>
+                            <label className="block mb-1 text-sm font-medium">
+                                Email
+                            </label>
                             <input
                                 type="email"
                                 value={email}
@@ -115,17 +155,17 @@ export default function LoginPage(){
                                 placeholder="Enter email"
                             />
                         </div>
-                        
+
                         <button
-                        onClick={handleLoginClick}
-                        disabled={isLoading}
-                        className="w-full py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600 disabled:bg-gray-300"
+                            onClick={handleLoginClick}
+                            disabled={isLoading}
+                            className="w-full py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600 disabled:bg-gray-300"
                         >
-                        {isLoading ? "Loading..." : "Continue"}
+                            {isLoading ? "Loading..." : "Continue"}
                         </button>
                     </div>
                 )}
-                
+
                 {/* Show loading indicator */}
                 {isLoading && !isRegistering && (
                     <div className="flex justify-center">
@@ -133,15 +173,13 @@ export default function LoginPage(){
                     </div>
                 )}
 
-                 {/* Show instructions if wallet not connected */}
+                {/* Show instructions if wallet not connected */}
                 {!connected && (
                     <div className="mt-4 text-center text-gray-600">
                         Connect your wallet to continue
                     </div>
                 )}
-
             </div>
         </div>
-    )
-
+    );
 }
