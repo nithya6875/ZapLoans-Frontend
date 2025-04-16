@@ -4,11 +4,12 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import bs58 from "bs58";
 
 // Login page component
 export default function LoginPage() {
-    // Get the wallet connection and public key
-    const { publicKey, connected } = useWallet();
+    // Get the wallet connection, public key, and signMessage function
+    const { publicKey, connected, signMessage } = useWallet();
 
     // State variables
     const [username, setUsername] = useState("");
@@ -60,19 +61,42 @@ export default function LoginPage() {
             setError("Username is required");
             return;
         }
+        if (!signMessage) {
+            setError("Wallet does not support message signing");
+            return;
+        }
 
         setIsLoading(true);
         setError("");
 
         try {
-            const response: any = authService.loginWithWallet(
-                //need to change the type of response based on backend
+            // Get nonce from server
+            const nonceResponse = await authService.getNonce(
+                publicKey.toString()
+            );
+            const nonceMessage = nonceResponse.nonce;
+            
+            // Create the message to sign (wallet address + nonce)
+            const messageToSign = `Verify wallet ownership: ${publicKey.toString()}\nNonce: ${nonceMessage}`;
+            
+            // Convert message to Uint8Array for signing
+            const messageBytes = new TextEncoder().encode(messageToSign);
+            
+            // Request user to sign the message with their wallet
+            const signedMessage = await signMessage(messageBytes);
+            
+            // Convert signature to base58 string to send to server
+            const signature = bs58.encode(signedMessage);
+            
+            // Send the signature along with login info
+            const response = await authService.loginWithWallet(
                 username,
                 publicKey.toString(),
-                email
+                email,
+                signature
             );
+            
             if (response.user) {
-                //depends on the backend as well
                 router.push("/dashboard");
             }
         } catch (error) {
