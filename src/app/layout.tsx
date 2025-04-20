@@ -2,6 +2,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import type { Metadata } from "next";
 import { WalletContextProvider } from "@/components/WalletContextProvider";
+import NavBar from "@/components/navbar";
+import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -31,9 +33,13 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body
-                className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+                className={`${geistSans.variable} ${geistMono.variable} antialiased bg-primary-background relative`}
             >
-                <WalletContextProvider>{children}</WalletContextProvider>
+                <WalletContextProvider>
+                    <NavBar />
+                    <Toaster position="top-right" />
+                    {children}
+                </WalletContextProvider>
             </body>
         </html>
     );
